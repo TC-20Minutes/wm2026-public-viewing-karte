@@ -11,17 +11,21 @@
   var CH_BOUNDS = L.latLngBounds([45.7, 5.8], [47.95, 10.6]); // Switzerland + Liechtenstein
   var isMobile = function () { return window.matchMedia("(max-width: 719px)").matches; };
 
-  // Theme — resolved in the <head> inline script; drives tiles + map colours.
-  var DARK = document.documentElement.getAttribute("data-theme") === "dark";
-  var THEME = DARK ? {
-    tiles: "https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png",
-    mask: "#10151a", maskOpacity: 0.9,
-    border: "#48555f", outline: "#7f95cf", highlight: "#5b86ff", highlightFill: 0.18
-  } : {
-    tiles: "https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png",
-    mask: "#d4dcea", maskOpacity: 0.96,
-    border: "#9fb0cc", outline: "#0D2880", highlight: "#2659FF", highlightFill: 0.12
-  };
+  // Theme — initial value resolved in the <head> inline script (from ?theme= or
+  // prefers-color-scheme); can be changed at runtime via postMessage so an embed
+  // follows the host article's light/dark theme. See applyTheme() below.
+  function themeColors(dark) {
+    return dark ? {
+      tiles: "https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png",
+      mask: "#10151a", maskOpacity: 0.9,
+      border: "#48555f", outline: "#7f95cf", highlight: "#5b86ff", highlightFill: 0.18
+    } : {
+      tiles: "https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png",
+      mask: "#d4dcea", maskOpacity: 0.96,
+      border: "#9fb0cc", outline: "#0D2880", highlight: "#2659FF", highlightFill: 0.12
+    };
+  }
+  var THEME = themeColors(document.documentElement.getAttribute("data-theme") === "dark");
 
   var els = {
     app: document.getElementById("app"),
@@ -108,6 +112,7 @@
 
   var cantonsByKey = {};
   var outlineBounds = null;
+  var maskLayer = null, outlineLayer = null, cantonBorderLayer = null;  // re-themed at runtime
   var programmaticMove = false;  // true while we move the map ourselves
   var userInteracted = false;    // stop auto-refit once the user takes over
   map.on("movestart zoomstart", function () { if (!programmaticMove) userInteracted = true; });
@@ -138,17 +143,17 @@
         holes.push(ring.map(function (c) { return [c[1], c[0]]; }));
       });
     });
-    L.polygon([outer].concat(holes), {
+    maskLayer = L.polygon([outer].concat(holes), {
       pane: "maskPane", stroke: false, fillColor: THEME.mask, fillOpacity: THEME.maskOpacity, interactive: false
     }).addTo(map);
 
-    var outlineLayer = L.geoJSON(outline, {
+    outlineLayer = L.geoJSON(outline, {
       pane: "outlinePane", interactive: false,
       style: { fill: false, color: THEME.outline, weight: 1.8, opacity: 0.7 }
     }).addTo(map);
 
     // Always-on canton borders (subtle), drawn beneath any highlight.
-    L.geoJSON(cantons, {
+    cantonBorderLayer = L.geoJSON(cantons, {
       pane: "cantonBorderPane", interactive: false,
       style: { fill: false, color: THEME.border, weight: 1, opacity: 0.85 }
     }).addTo(map);
@@ -518,6 +523,28 @@
   els.scrim.addEventListener("click", closeSheet);
   document.addEventListener("keydown", function (e) {
     if (e.key === "Escape" && !els.sheet.hidden) closeSheet();
+  });
+
+  /* ---- Runtime theming (so an embed can follow the host article) ----- */
+  function applyTheme(theme) {
+    var dark = theme === "dark";
+    document.documentElement.setAttribute("data-theme", dark ? "dark" : "light");
+    THEME = themeColors(dark);
+    if (basemap && basemap.setUrl) basemap.setUrl(THEME.tiles);
+    if (maskLayer) maskLayer.setStyle({ fillColor: THEME.mask, fillOpacity: THEME.maskOpacity });
+    if (outlineLayer) outlineLayer.setStyle({ color: THEME.outline });
+    if (cantonBorderLayer) cantonBorderLayer.setStyle({ color: THEME.border });
+    if (highlightLayer) highlightLayer.setStyle({ color: THEME.highlight, fillColor: THEME.highlight, fillOpacity: THEME.highlightFill });
+  }
+
+  // The host page can set the theme via postMessage, e.g.:
+  //   iframe.contentWindow.postMessage({ type: "set-theme", theme: "dark" }, "*")
+  // (a plain string "dark"/"light" is also accepted). Only the appearance changes.
+  window.addEventListener("message", function (e) {
+    var d = e.data, t = null;
+    if (d === "dark" || d === "light") t = d;
+    else if (d && typeof d === "object" && (d.type === "set-theme" || "theme" in d)) t = d.theme;
+    if (t === "dark" || t === "light") applyTheme(t);
   });
 
   // Swipe-down to dismiss the sheet on touch devices.

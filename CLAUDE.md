@@ -94,6 +94,10 @@ dependency except the map tiles (CARTO/OSM).
   `--map-bg`). Dark `--bg` is the 20 Minuten `#1D242A`. JS reads `data-theme` into a `THEME` object that picks the
   CARTO tiles (`light_nolabels`/`dark_nolabels`) and the mask/border/outline/highlight colours. **Don't hardcode
   colours in JS map layers** — use `THEME`. Keep on-accent text white in both themes (`--on-accent`).
+  The theme can also change at **runtime via `postMessage`** so an embed follows the host article live:
+  `applyTheme(theme)` rebuilds `THEME`, swaps the tile URL (`basemap.setUrl`) and re-`setStyle`s the mask/outline/
+  border/highlight layers (kept in outer vars `maskLayer`/`outlineLayer`/`cantonBorderLayer`/`highlightLayer`).
+  Accepted message: `{type:"set-theme", theme:"dark"|"light"}` (or a bare `"dark"`/`"light"` string).
 - **Widget border:** `#app` has a 1px `--widget-border` + 12px radius + `overflow:hidden` so the embed reads as a
   widget in both themes. (Fixed `.sheet`/`.scrim` are intentionally not clipped by it.)
 - **iframe scroll-jump (important):** clicking a venue must NOT make the host page scroll. Three guards: the map is

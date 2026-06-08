@@ -86,9 +86,32 @@ Notes:
 - `allow="geolocation"` enables the “find my location” button (the browser still asks the user for permission).
 - Adjust `height` to taste; `640px` works well on mobile and desktop. The map itself fills the iframe.
 - Because gesture handling is on, readers can scroll past the map with one finger; two fingers pan/zoom.
-- **Dark mode:** the widget follows the visitor's `prefers-color-scheme` automatically. To force a theme that
-  matches the host page (e.g. 20 Minuten in dark mode), append `?theme=dark` or `?theme=light` to the `src`
-  (e.g. `src="…/wm2026-public-viewing-karte/?theme=dark"`). The dark theme uses the 20 Minuten background `#1D242A`.
+- **Dark mode:** the widget uses the 20 Minuten dark background `#1D242A`. There are three ways to set the theme,
+  in order of precedence:
+  1. **Follow the article live (recommended):** the host page tells the widget its theme via `postMessage`. This
+     also updates instantly if the article has a light/dark toggle. Add this next to the iframe:
+     ```html
+     <iframe id="pv-map" src="https://tc-20minutes.github.io/wm2026-public-viewing-karte/"
+             title="Public Viewing in der Schweiz – WM 2026" loading="lazy"
+             style="width:100%;height:640px;max-height:85vh;border:0;border-radius:12px" allow="geolocation"></iframe>
+     <script>
+       (function () {
+         var iframe = document.getElementById("pv-map");
+         // Adapt this to how the page marks dark mode (class, attribute, etc.):
+         function pageTheme() {
+           return document.documentElement.classList.contains("dark") ? "dark" : "light";
+         }
+         function sendTheme() {
+           iframe.contentWindow.postMessage({ type: "set-theme", theme: pageTheme() },
+             "https://tc-20minutes.github.io");
+         }
+         iframe.addEventListener("load", sendTheme);   // initial sync
+         // If the article has a live theme toggle, also call sendTheme() when it changes.
+       })();
+     </script>
+     ```
+  2. **Fixed per embed:** append `?theme=dark` or `?theme=light` to the `src` (no script needed; no live toggle).
+  3. **Automatic:** with neither of the above, it follows the visitor's `prefers-color-scheme`.
 - The widget has a subtle 1px border + 12px rounded corners so it reads as an embedded widget in light and dark pages.
 
 ## Attribution & licences
