@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="700" height="394" viewBox="0 0 700 394" role="img" aria-label="Public Viewing">
+  <rect width="700" height="394" fill="#07184D"/>
+  <g fill="none" stroke="#2659FF" stroke-width="10" stroke-linejoin="round" stroke-linecap="round">
+    <rect x="250" y="150" width="200" height="130" rx="14"/>
+    <path d="M325 300 h50 M350 280 v20"/>
+  </g>
+  <path d="M333 188 v54 l46 -27 z" fill="#00D0FF"/>
+  <text x="350" y="345" fill="#EDF4FF" font-family="Matter, Arial, sans-serif" font-size="26" font-weight="600" text-anchor="middle" letter-spacing="0.5">Public Viewing</text>
+</svg>
