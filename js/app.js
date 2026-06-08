@@ -11,6 +11,18 @@
   var CH_BOUNDS = L.latLngBounds([45.7, 5.8], [47.95, 10.6]); // Switzerland + Liechtenstein
   var isMobile = function () { return window.matchMedia("(max-width: 719px)").matches; };
 
+  // Theme — resolved in the <head> inline script; drives tiles + map colours.
+  var DARK = document.documentElement.getAttribute("data-theme") === "dark";
+  var THEME = DARK ? {
+    tiles: "https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png",
+    mask: "#10151a", maskOpacity: 0.9,
+    border: "#48555f", outline: "#7f95cf", highlight: "#5b86ff", highlightFill: 0.18
+  } : {
+    tiles: "https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png",
+    mask: "#d4dcea", maskOpacity: 0.96,
+    border: "#9fb0cc", outline: "#0D2880", highlight: "#2659FF", highlightFill: 0.12
+  };
+
   var els = {
     app: document.getElementById("app"),
     map: document.getElementById("map"),
@@ -18,6 +30,7 @@
     canton: document.getElementById("canton-filter"),
     viewMap: document.getElementById("view-map"),
     viewList: document.getElementById("view-list"),
+    reset: document.getElementById("reset-view"),
     count: document.getElementById("result-count"),
     sheet: document.getElementById("sheet"),
     scrim: document.getElementById("scrim"),
@@ -42,6 +55,10 @@
   /* ---- Map setup ---------------------------------------------------- */
   var map = L.map("map", {
     zoomControl: false,
+    // keyboard:false → Leaflet won't focus the map container on click. Inside an
+    // iframe that focus makes the host page scroll the embed into view (the
+    // "jump to Zur Website" bug on desktop). Pan/zoom via buttons + gestures.
+    keyboard: false,
     gestureHandling: true,
     gestureHandlingOptions: {
       text: {
@@ -57,9 +74,9 @@
     zoomSnap: 0  // allow fractional zoom so the country fits tightly, uncut
   });
 
-  // Minimal OpenStreetMap-based basemap (CARTO Positron, no labels) — clean
-  // light grey with no place names so the markers and canton borders lead.
-  var basemap = L.tileLayer("https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png", {
+  // Minimal OpenStreetMap-based basemap (CARTO Positron, no labels) — clean,
+  // no place names so the markers and canton borders lead. Light or dark per theme.
+  var basemap = L.tileLayer(THEME.tiles, {
     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions" target="_blank" rel="noopener">CARTO</a>',
     subdomains: "abcd",
     maxZoom: 19
@@ -97,7 +114,7 @@
   var highlightLayer = L.geoJSON(null, {
     pane: "cantonPane",
     interactive: false,
-    style: { color: "#2659FF", weight: 2.5, fillColor: "#2659FF", fillOpacity: 0.12 }
+    style: { color: THEME.highlight, weight: 2.5, fillColor: THEME.highlight, fillOpacity: THEME.highlightFill }
   }).addTo(map);
 
   function eachExteriorRing(geom, cb) {
@@ -122,18 +139,18 @@
       });
     });
     L.polygon([outer].concat(holes), {
-      pane: "maskPane", stroke: false, fillColor: "#d4dcea", fillOpacity: 0.96, interactive: false
+      pane: "maskPane", stroke: false, fillColor: THEME.mask, fillOpacity: THEME.maskOpacity, interactive: false
     }).addTo(map);
 
     var outlineLayer = L.geoJSON(outline, {
       pane: "outlinePane", interactive: false,
-      style: { fill: false, color: "#0D2880", weight: 1.8, opacity: 0.7 }
+      style: { fill: false, color: THEME.outline, weight: 1.8, opacity: 0.7 }
     }).addTo(map);
 
     // Always-on canton borders (subtle), drawn beneath any highlight.
     L.geoJSON(cantons, {
       pane: "cantonBorderPane", interactive: false,
-      style: { fill: false, color: "#9fb0cc", weight: 1, opacity: 0.85 }
+      style: { fill: false, color: THEME.border, weight: 1, opacity: 0.85 }
     }).addTo(map);
 
     // Fit the whole country with breathing room so it isn't clipped at the
@@ -235,6 +252,29 @@
   });
   map.addLayer(cluster);
 
+  // Leaflet/markercluster put tabindex="0" on every marker + cluster icon.
+  // Inside a cross-origin iframe, clicking a focusable element makes the HOST
+  // page scroll the embed into view (the "jump to Zur Website" bug). We strip
+  // tabindex/role as icons are inserted so they're never focusable; clicks still
+  // work. Keyboard access to venues is provided by the list view.
+  function stripFocusable(root) {
+    if (!root || !root.querySelectorAll) return;
+    if (root.classList && root.classList.contains("leaflet-marker-icon")) {
+      root.removeAttribute("tabindex"); root.removeAttribute("role");
+    }
+    root.querySelectorAll(".leaflet-marker-icon[tabindex]").forEach(function (el) {
+      el.removeAttribute("tabindex"); el.removeAttribute("role");
+    });
+  }
+  var markerPane = map.getPane("markerPane");
+  new MutationObserver(function (muts) {
+    muts.forEach(function (m) {
+      Array.prototype.forEach.call(m.addedNodes, function (n) {
+        if (n.nodeType === 1) stripFocusable(n);
+      });
+    });
+  }).observe(markerPane, { childList: true, subtree: true });
+
   function pinIcon() {
     return L.divIcon({
       className: "",
@@ -275,12 +315,14 @@
     state.venues.forEach(function (v) {
       var m = L.marker([v.lat, v.lon], {
         icon: pinIcon(),
-        keyboard: true,
+        // keyboard:false → Leaflet won't focus the marker on click. Focusing a
+        // marker inside an iframe makes the host page scroll the embed into view
+        // (the "jump to Zur Website" bug). Keyboard access is via the list view.
+        keyboard: false,
         title: v.name,
         alt: v.name
       });
-      m.on("click", function () { openSheet(v, m); });
-      m.on("keypress", function (e) { if (e.originalEvent.key === "Enter") openSheet(v, m); });
+      m.on("click", function () { openSheet(v, m, false); });
       state.markers[v.id] = m;
     });
   }
@@ -345,7 +387,8 @@
           "<span class='meta'><span class='chip'>" + esc(v.canton) + "</span>" + esc(shortAddr(v.address)) + "</span>" +
         "</span>";
       card.querySelector(".thumb").addEventListener("error", function () { this.src = PLACEHOLDER; });
-      card.addEventListener("click", function () { focusVenueOnMap(v); });
+      // e.detail === 0 → activated by keyboard (Enter/Space), so move focus into the sheet.
+      card.addEventListener("click", function (e) { focusVenueOnMap(v, e.detail === 0); });
       frag.appendChild(card);
     });
     els.list.appendChild(frag);
@@ -370,18 +413,21 @@
   els.viewList.addEventListener("click", function () { setView("list"); });
 
   // From a list card: switch to map, decluster, open sheet.
-  function focusVenueOnMap(v) {
+  function focusVenueOnMap(v, focusClose) {
     var m = state.markers[v.id];
     setView("map");
     setTimeout(function () {
       map.invalidateSize();
-      cluster.zoomToShowLayer(m, function () { openSheet(v, m); });
+      cluster.zoomToShowLayer(m, function () { openSheet(v, m, focusClose); });
     }, 60);
   }
 
   /* ---- Detail sheet ------------------------------------------------- */
-  function openSheet(v, marker) {
-    state.lastFocus = document.activeElement;
+  function openSheet(v, marker, focusClose) {
+    // Only move focus into the sheet for keyboard-initiated opens. Focusing an
+    // element inside a cross-origin iframe makes the host page scroll the embed
+    // into view, so pointer taps must NOT grab focus.
+    state.lastFocus = focusClose ? document.activeElement : null;
     setActiveMarker(v.id);
 
     els.sheetTitle.textContent = v.name;
@@ -399,12 +445,14 @@
     else { els.sheetLink.style.display = "none"; }
 
     els.scrim.hidden = false; els.sheet.hidden = false;
+    var scroller = els.sheet.querySelector(".scroll");
+    if (scroller) scroller.scrollTop = 0;            // always start at the top
     requestAnimationFrame(function () {
       els.scrim.classList.add("show");
       els.sheet.classList.add("show");
     });
     panToMarker(marker);
-    els.sheetClose.focus();
+    if (focusClose) els.sheetClose.focus({ preventScroll: true });
   }
 
   function panToMarker(marker) {
@@ -431,7 +479,9 @@
     };
     els.sheet.addEventListener("transitionend", done);
     setTimeout(done, 350); // fallback if no transition fires
-    if (state.lastFocus && state.lastFocus.focus) state.lastFocus.focus();
+    if (state.lastFocus && state.lastFocus.focus) {
+      try { state.lastFocus.focus({ preventScroll: true }); } catch (e) { state.lastFocus.focus(); }
+    }
   }
 
   function setActiveMarker(id) {
@@ -452,6 +502,18 @@
     updateCantonHighlight(els.canton.value, true);
     if (state.view === "list") setView("map"); // show the highlight on the map
   });
+
+  // Reset to the initial state: all cantons, map view, no highlight, full country.
+  els.reset.addEventListener("click", function () {
+    els.canton.value = "";
+    updateCantonHighlight("", false);  // clear highlight (fitCountry handles the view)
+    applyFilters();
+    closeSheet();
+    setView("map");
+    userInteracted = false;
+    fitCountry();
+  });
+
   els.sheetClose.addEventListener("click", closeSheet);
   els.scrim.addEventListener("click", closeSheet);
   document.addEventListener("keydown", function (e) {

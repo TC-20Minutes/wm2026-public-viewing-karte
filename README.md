@@ -74,10 +74,10 @@ Paste this responsive snippet into the article HTML. It keeps a fixed, mobile-fr
 
 ```html
 <iframe
-  src="https://<org>.github.io/<repo>/"
-  title="Public Viewing WM 2026 – Karte der Schweiz"
+  src="https://tc-20minutes.github.io/wm2026-public-viewing-karte/"
+  title="Public Viewing in der Schweiz – WM 2026"
   loading="lazy"
-  style="width:100%; height:640px; max-height:85vh; border:0; border-radius:16px; overflow:hidden;"
+  style="width:100%; height:640px; max-height:85vh; border:0; border-radius:12px; overflow:hidden;"
   allow="geolocation">
 </iframe>
 ```
@@ -86,6 +86,10 @@ Notes:
 - `allow="geolocation"` enables the “find my location” button (the browser still asks the user for permission).
 - Adjust `height` to taste; `640px` works well on mobile and desktop. The map itself fills the iframe.
 - Because gesture handling is on, readers can scroll past the map with one finger; two fingers pan/zoom.
+- **Dark mode:** the widget follows the visitor's `prefers-color-scheme` automatically. To force a theme that
+  matches the host page (e.g. 20 Minuten in dark mode), append `?theme=dark` or `?theme=light` to the `src`
+  (e.g. `src="…/wm2026-public-viewing-karte/?theme=dark"`). The dark theme uses the 20 Minuten background `#1D242A`.
+- The widget has a subtle 1px border + 12px rounded corners so it reads as an embedded widget in light and dark pages.
 
 ## Attribution & licences
 

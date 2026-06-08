@@ -6,6 +6,20 @@
   <title>Public Viewing in der Schweiz – WM 2026 | 20 Minuten</title>
   <meta name="description" content="Alle Public-Viewing-Standorte zur Fussball-WM 2026 in der Schweiz auf einer interaktiven Karte." />
 
+  <!-- Resolve theme before first paint (avoids a flash). Embeds can force a
+       theme to match the host page via ?theme=dark or ?theme=light; otherwise
+       the visitor's prefers-color-scheme is used. -->
+  <script>
+    (function () {
+      try {
+        var p = new URLSearchParams(location.search).get("theme");
+        var dark = p ? p === "dark"
+          : (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches);
+        document.documentElement.setAttribute("data-theme", dark ? "dark" : "light");
+      } catch (e) { document.documentElement.setAttribute("data-theme", "light"); }
+    })();
+  </script>
+
   <!-- Vendored libraries (no runtime CDN dependency) -->
   <link rel="stylesheet" href="vendor/leaflet/leaflet.css" />
   <link rel="stylesheet" href="vendor/markercluster/MarkerCluster.css" />
@@ -41,6 +55,11 @@
             Liste
           </button>
         </div>
+
+        <button id="reset-view" class="reset-btn" type="button" title="Ansicht zurücksetzen">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 5v5h5M4.5 9.5a8 8 0 1 1-1.2 5.2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Zurücksetzen
+        </button>
       </div>
 
       <p class="result-count" id="result-count" aria-live="polite"></p>

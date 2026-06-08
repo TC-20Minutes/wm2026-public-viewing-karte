@@ -86,6 +86,21 @@ dependency except the map tiles (CARTO/OSM).
   floating card. Touch targets ≥44px. **Gesture handling**: one finger scrolls
   the article, two fingers pan/zoom (so the iframe doesn't trap page scroll).
 - **No search box:** removed on purpose — the canton filter covers it.
+- **Reset button** ("Zurücksetzen"): clears the filter, closes the sheet, returns to map view, and re-fits the
+  whole country (`els.reset` handler in app.js).
+- **Theming / dark mode:** an inline `<head>` script sets `<html data-theme="light|dark">` from `?theme=` (embeds
+  can force it to match the host) or `prefers-color-scheme`. CSS keys off `:root[data-theme="dark"]` with semantic
+  tokens (`--bg`,`--surface`,`--surface-2`,`--text`,`--text-muted`,`--icon`,`--line`,`--widget-border`,`--scrim`,
+  `--map-bg`). Dark `--bg` is the 20 Minuten `#1D242A`. JS reads `data-theme` into a `THEME` object that picks the
+  CARTO tiles (`light_nolabels`/`dark_nolabels`) and the mask/border/outline/highlight colours. **Don't hardcode
+  colours in JS map layers** — use `THEME`. Keep on-accent text white in both themes (`--on-accent`).
+- **Widget border:** `#app` has a 1px `--widget-border` + 12px radius + `overflow:hidden` so the embed reads as a
+  widget in both themes. (Fixed `.sheet`/`.scrim` are intentionally not clipped by it.)
+- **iframe scroll-jump (important):** clicking a venue must NOT make the host page scroll. Three guards: the map is
+  created with `keyboard:false` (Leaflet otherwise focuses the map container on click → host scrolls the iframe into
+  view); a MutationObserver strips `tabindex`/`role` from marker + cluster icons (markercluster re-adds them); and
+  the detail sheet only takes focus for keyboard-initiated opens (`openSheet(v, m, focusClose)`, where list cards pass
+  `e.detail === 0`). Focusing anything inside a cross-origin iframe scrolls the host — so pointer taps focus nothing.
 - **Brand:** Matter font; blue-first palette in `:root`
   (`--blue #2659FF`, `--mid-blue #0D2880`, `--dark-blue #07184D`,
   `--cool-grey #EDF4FF`). Red `#CA0016` is reserved for breaking news — **do not
