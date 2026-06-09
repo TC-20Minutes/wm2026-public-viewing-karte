@@ -8,15 +8,19 @@
 
   <!-- Resolve theme before first paint (avoids a flash). Embeds can force a
        theme to match the host page via ?theme=dark or ?theme=light; otherwise
-       the visitor's prefers-color-scheme is used. -->
+       the platform's prefers-color-scheme is followed (live, see app.js).
+       data-theme-locked="true" means an explicit ?theme= override is set and
+       the live OS/platform follow-along is disabled. -->
   <script>
     (function () {
+      var root = document.documentElement;
       try {
         var p = new URLSearchParams(location.search).get("theme");
         var dark = p ? p === "dark"
           : (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches);
-        document.documentElement.setAttribute("data-theme", dark ? "dark" : "light");
-      } catch (e) { document.documentElement.setAttribute("data-theme", "light"); }
+        root.setAttribute("data-theme", dark ? "dark" : "light");
+        if (p === "dark" || p === "light") root.setAttribute("data-theme-locked", "true");
+      } catch (e) { root.setAttribute("data-theme", "light"); }
     })();
   </script>
 
@@ -31,7 +35,7 @@
   <div id="app" data-view="map">
     <header class="toolbar">
       <div class="brand">
-        <span class="logo" aria-hidden="true">20</span>
+        <img class="logo" src="assets/brand/logo-20min.png" alt="20 Minuten" width="185" height="252" />
         <span class="titles">
           <h1>Public Viewing in der Schweiz</h1>
           <p>Fussball-WM 2026</p>
@@ -56,9 +60,9 @@
           </button>
         </div>
 
-        <button id="reset-view" class="reset-btn" type="button" title="Ansicht zurücksetzen">
+        <button id="reset-view" class="reset-btn" type="button" title="Ansicht zurücksetzen" aria-label="Ansicht zurücksetzen">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 5v5h5M4.5 9.5a8 8 0 1 1-1.2 5.2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          Zurücksetzen
+          <span class="label">Zurücksetzen</span>
         </button>
       </div>
 
@@ -69,6 +73,10 @@
       <div id="map" role="application" aria-label="Karte der Public-Viewing-Standorte"></div>
       <div id="list" class="list-view" aria-label="Liste der Public-Viewing-Standorte"></div>
     </main>
+
+    <footer class="source">
+      Quelle: eigene Recherche, ohne Anspruch auf Vollständigkeit · Grafik: 20min/Taddeo&nbsp;Cerletti
+    </footer>
   </div>
 
   <div class="scrim" id="scrim" hidden></div>

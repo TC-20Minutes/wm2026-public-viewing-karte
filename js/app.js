@@ -8,6 +8,12 @@
   "use strict";
 
   var PLACEHOLDER = "assets/teasers/placeholder.svg";
+  // All cantons (+ Liechtenstein), using the exact labels the data uses. Lets
+  // the filter list cantons with no public viewings — greyed out + unselectable.
+  var ALL_CANTONS = ["Aargau", "Appenzell (AI/AR)", "Basel-Land", "Basel-Stadt", "Bern",
+    "Freiburg", "Genf", "Glarus", "Graubünden", "Jura", "Liechtenstein", "Luzern",
+    "Neuenburg", "Nidwalden", "Obwalden", "Schaffhausen", "Schwyz", "Solothurn",
+    "St. Gallen", "Tessin", "Thurgau", "Uri", "Waadt", "Wallis", "Zug", "Zürich"];
   var CH_BOUNDS = L.latLngBounds([45.7, 5.8], [47.95, 10.6]); // Switzerland + Liechtenstein
   var isMobile = function () { return window.matchMedia("(max-width: 719px)").matches; };
 
@@ -243,7 +249,10 @@
   /* ---- Marker cluster group ----------------------------------------- */
   var cluster = L.markerClusterGroup({
     showCoverageOnHover: false,
-    maxClusterRadius: 55,
+    // Smaller radius at the country-wide zoom so the dense Mittelland breaks
+    // into several regional clusters instead of one giant blob (better at-a-
+    // glance distribution on mobile); tighter grouping again as you zoom in.
+    maxClusterRadius: function (zoom) { return zoom <= 8 ? 35 : 55; },
     spiderfyOnMaxZoom: true,
     iconCreateFunction: function (c) {
       var n = c.getChildCount();
@@ -307,11 +316,21 @@
     });
 
   function buildCantonOptions() {
-    var cantons = {};
-    state.venues.forEach(function (v) { if (v.canton) cantons[v.canton] = true; });
-    Object.keys(cantons).sort(function (a, b) { return a.localeCompare(b, "de"); }).forEach(function (c) {
+    var counts = {};
+    state.venues.forEach(function (v) { if (v.canton) counts[v.canton] = (counts[v.canton] || 0) + 1; });
+    // Show every canton; any not present in the data goes last as a safety net.
+    var all = ALL_CANTONS.slice();
+    Object.keys(counts).forEach(function (c) { if (all.indexOf(c) === -1) all.push(c); });
+    all.sort(function (a, b) { return a.localeCompare(b, "de"); }).forEach(function (c) {
       var o = document.createElement("option");
-      o.value = c; o.textContent = c;
+      o.value = c;
+      if (counts[c]) {
+        o.textContent = c;
+      } else {
+        // No public viewings here → greyed out and unselectable.
+        o.textContent = c + " (0)";
+        o.disabled = true;
+      }
       els.canton.appendChild(o);
     });
   }
@@ -345,10 +364,14 @@
     var matchIds = {};
     matches.forEach(function (v) { matchIds[v.id] = true; });
 
-    // Sync cluster layer to the filtered set.
+    // Sync cluster layer to the filtered set. Markercluster's bulk addLayers()
+    // has a long-standing bug where a SINGLE marker is never rendered (cantons
+    // with one venue, e.g. Tessin/Zug, showed an empty map). Use the singular
+    // addLayer() for the one-marker case; keep bulk addLayers() for the rest.
     cluster.clearLayers();
     var layers = matches.map(function (v) { return state.markers[v.id]; });
-    cluster.addLayers(layers);
+    if (layers.length === 1) cluster.addLayer(layers[0]);
+    else if (layers.length) cluster.addLayers(layers);
 
     renderList(matches);
     renderCount(matches.length);
@@ -525,7 +548,17 @@
     if (e.key === "Escape" && !els.sheet.hidden) closeSheet();
   });
 
-  /* ---- Runtime theming (so an embed can follow the host article) ----- */
+  /* ---- Runtime theming (so an embed follows the platform's light/dark) ----
+     Three inputs, in order of precedence:
+       1. ?theme=dark|light  → forced, locks out the live OS follow-along.
+       2. postMessage from the host → explicit, also locks the follow-along.
+       3. the platform's prefers-color-scheme → followed LIVE (the default).
+     Without (3) reacting to changes, a widget that loaded while the platform
+     was light would stay light after the reader switches the platform to dark
+     — which is the "dark mode doesn't work" symptom. */
+  // Locked once an explicit override (?theme= or a postMessage) is in effect.
+  var themeLocked = document.documentElement.getAttribute("data-theme-locked") === "true";
+
   function applyTheme(theme) {
     var dark = theme === "dark";
     document.documentElement.setAttribute("data-theme", dark ? "dark" : "light");
@@ -544,8 +577,17 @@
     var d = e.data, t = null;
     if (d === "dark" || d === "light") t = d;
     else if (d && typeof d === "object" && (d.type === "set-theme" || "theme" in d)) t = d.theme;
-    if (t === "dark" || t === "light") applyTheme(t);
+    if (t === "dark" || t === "light") { themeLocked = true; applyTheme(t); }
   });
+
+  // Follow the platform's light/dark setting live (unless ?theme=/postMessage
+  // forced one). Reacts when the reader toggles the OS/platform colour scheme.
+  if (window.matchMedia) {
+    var mq = window.matchMedia("(prefers-color-scheme: dark)");
+    var onSchemeChange = function (e) { if (!themeLocked) applyTheme(e.matches ? "dark" : "light"); };
+    if (mq.addEventListener) mq.addEventListener("change", onSchemeChange);
+    else if (mq.addListener) mq.addListener(onSchemeChange);  // Safari < 14
+  }
 
   // Swipe-down to dismiss the sheet on touch devices.
   var touchStartY = null;

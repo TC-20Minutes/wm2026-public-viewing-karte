@@ -9,12 +9,13 @@ Switzerland, built for **20 Minuten** and designed to be **embedded via `<iframe
 - **Marker clustering** so dense areas (e.g. Zürich's 19 venues) stay readable; clusters split on zoom.
 - **Tap a pin** → a large, finger-friendly detail sheet with the venue **name**, **canton**, **address**,
   **short description**, a **teaser image** (the link's Open Graph preview), and a **"Zur Website"** button.
-- **Canton filter**, **geolocate-me**, and a **map / list toggle**.
+- **Canton filter** (lists all 26 cantons; those with no venue are greyed out), **geolocate-me**, and a **map / list toggle**.
 - **Gesture handling**: one finger scrolls the article, two fingers pan/zoom the map (no scroll trap inside the iframe).
-- **20 Minuten brand**: Matter typeface, blue-first palette.
+- **20 Minuten brand**: Matter typeface, blue-first palette, the 20 Minuten logo in the toolbar.
+- **Source footer**: "Quelle: eigene Recherche, ohne Anspruch auf Vollständigkeit · Grafik: 20min/Taddeo Cerletti".
 
 Everything (libraries, fonts, teaser images, data) is **self-hosted in this repo** — the published page makes no
-runtime call to third-party servers except the swisstopo map tiles.
+runtime call to third-party servers except the CARTO/OpenStreetMap map tiles.
 
 ## Project layout
 
@@ -110,8 +111,9 @@ Notes:
        })();
      </script>
      ```
-  2. **Fixed per embed:** append `?theme=dark` or `?theme=light` to the `src` (no script needed; no live toggle).
-  3. **Automatic:** with neither of the above, it follows the visitor's `prefers-color-scheme`.
+  2. **Fixed per embed:** append `?theme=dark` or `?theme=light` to the `src` (no script needed; locks the theme).
+  3. **Automatic (default):** with neither of the above, it follows the platform's `prefers-color-scheme` **live** —
+     if the reader switches the platform/OS between light and dark, the widget flips with it (no reload needed).
 - The widget has a subtle 1px border + 12px rounded corners so it reads as an embedded widget in light and dark pages.
 
 ## Attribution & licences

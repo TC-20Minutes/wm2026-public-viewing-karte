@@ -104,10 +104,7 @@ html, body {
 .brand { display: flex; align-items: center; gap: 10px; margin-right: auto; min-width: 0; }
 .brand .logo {
   flex: 0 0 auto;
-  display: inline-flex; align-items: center; justify-content: center;
-  width: 34px; height: 34px; border-radius: 7px;
-  background: var(--blue); color: var(--on-accent);
-  font-weight: 700; font-size: 15px; letter-spacing: -.5px;
+  width: auto; height: 34px; display: block;
 }
 .brand .titles { min-width: 0; }
 .brand h1 { margin: 0; font-size: 16px; font-weight: 600; line-height: 1.1; color: var(--text); }
@@ -129,6 +126,7 @@ html, body {
 }
 #canton-filter { padding-right: 18px; cursor: pointer; -webkit-appearance: none; appearance: none; max-width: 220px; }
 #canton-filter option { color: #07184D; background: #fff; }  /* native menu stays legible */
+#canton-filter option:disabled { color: #9aa6bf; }            /* cantons with no venues: greyed */
 .field.select::after {
   content: ""; position: absolute; right: 14px; pointer-events: none;
   width: 8px; height: 8px; border-right: 2px solid var(--icon); border-bottom: 2px solid var(--icon);
@@ -158,8 +156,35 @@ html, body {
 .reset-btn:focus-visible { outline: 3px solid rgba(38,89,255,.4); outline-offset: 2px; }
 .reset-btn svg { flex: 0 0 auto; }
 
-.result-count { flex-basis: 100%; font-size: 13px; font-weight: 500; color: var(--text-muted); }
+.result-count { flex-basis: 100%; font-size: 13px; font-weight: 500; color: var(--text-muted); margin: 0; }
 .result-count strong { color: var(--text); font-weight: 600; }
+
+/* Compact toolbar on phones so the map gets the vertical space it needs
+   (the controls otherwise wrap to ~3 rows and crowd the country out). The
+   controls sit on one row: the filter flexes to fill, the reset collapses to
+   an icon. */
+@media (max-width: 719px) {
+  .toolbar { padding: 9px 12px; gap: 8px 8px; }
+  .brand h1 { font-size: 15px; }
+  .controls { width: 100%; flex-wrap: nowrap; gap: 8px; }
+  .field.select { flex: 1 1 auto; min-width: 0; padding: 0 12px; }
+  #canton-filter { max-width: none; width: 100%; }
+  .view-toggle { flex: 0 0 auto; }
+  .view-toggle button { padding: 0 13px; }
+  .reset-btn { flex: 0 0 auto; padding: 0; width: var(--tap); justify-content: center; }
+  .reset-btn .label { display: none; }
+  .result-count { font-size: 12px; }
+}
+
+/* ---- Source / credits footer --------------------------------------- */
+.source {
+  flex: 0 0 auto;
+  padding: 7px 14px;
+  font-size: 11px; line-height: 1.35; font-weight: 500;
+  color: var(--text-muted); background: var(--surface);
+  border-top: 1px solid var(--line);
+  text-align: center;
+}
 
 /* ---- Map / content -------------------------------------------------- */
 main { position: relative; flex: 1 1 auto; min-height: 0; }
