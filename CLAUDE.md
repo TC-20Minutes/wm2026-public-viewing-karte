@@ -32,6 +32,7 @@ assets/brand/logo-20min.png# 20 Minuten brand mark (copied out of git-ignored cd
 assets/markers/            # (pin is inline SVG in app.js; folder reserved)
 vendor/                    # pinned local copies of Leaflet + markercluster + gesture-handling
 build/build_data.py        # xlsx -> data.json + fetch/optimise teaser images
+build/build_coords.py      # re-geocodes the lat/lon in data.json (run AFTER build_data.py)
 build/build_geo.py         # geoBoundaries -> outline.geojson + cantons.geojson
 data/…xlsx                 # source spreadsheet
 .nojekyll                  # so GitHub Pages serves vendor/ and dotfiles untouched
@@ -50,10 +51,14 @@ dependency except the map tiles (CARTO/OSM).
    fetched-vs-failed summary. ~32 venues have no usable preview (Instagram needs
    login, some sites block/serve logos) → `image:null` → branded placeholder.
    **This is expected**, not a bug.
-2. `build/build_geo.py` downloads boundaries from geoBoundaries (cached in
+2. `build/build_coords.py` **re-geocodes the coordinates** in `js/data.json`
+   (the xlsx lat/lon are low-precision and were individually wrong — see the
+   gotcha below). Run it **after** `build_data.py`, which still emits the raw
+   spreadsheet coords.
+3. `build/build_geo.py` downloads boundaries from geoBoundaries (cached in
    `build/geo_cache/`, git-ignored), maps canton `shapeName` → the canton label
    used in the data, rounds coords, and writes the two `assets/geo/*.geojson`.
-3. `js/app.js` fetches `data.json` + the two geojson at runtime and renders.
+4. `js/app.js` fetches `data.json` + the two geojson at runtime and renders.
 
 `LOT-Koordinaten` in the xlsx is **longitude** (despite the name). The data's
 `canton` field groups **Appenzell (AI/AR)** as one label and includes
@@ -61,6 +66,19 @@ dependency except the map tiles (CARTO/OSM).
 
 ## Key decisions & gotchas (don't re-break these)
 
+- **Coordinates are corrected by `build_coords.py`, NOT taken from the xlsx:** the spreadsheet lat/lon are
+  low-precision and were individually off (50 m to several km — Gerolds Garten ~190 m, Maag Halle landed on the
+  railway). `build_data.py` still writes those raw coords, so **`build_coords.py` must run after it** to fix
+  `js/data.json`. It cross-checks three signals per venue: (1) the **swisstopo address register**, matched by street
+  name **and** house number — it takes the exact number or the nearest registered number on the *same* street, never
+  `results[0]` blindly (that fuzzy-matched "Hardstrasse 219" onto "Hardstrasse 181" on the tracks); (2) the **venue
+  name** via OSM/Nominatim corroborated by the swisstopo gazetteer, for venues with no house number (squares, parks,
+  the Ufschötti) and as a cross-check; (3) the **original coordinate**, kept when nothing improves on it. A name-vs-
+  address disagreement >300 m is flagged — that caught two spreadsheet entries that were the *organiser's* address,
+  not the venue. A handful of hand-verified fixes live in the `OVERRIDES` dict at the top of the script (badly-wrong
+  source coords whose correct spot was confirmed by hand); **keep `OVERRIDES` if you re-run.** Name lookups cache in
+  `build/geo_cache/` (git-ignored). Venues that can't be auto-pinned keep their hand-placed point and are listed at
+  the end of the run. The embed/iframe is unaffected — only data values change.
 - **Base map:** monochrome **CARTO Positron `light_nolabels`** (OSM-based, no
   place names), fallback to standard OSM on repeated tile errors. We previously
   used swisstopo — intentionally replaced.
@@ -142,6 +160,8 @@ Rebuild data only when the xlsx changes (deps: `pip install -r build/requirement
 ```bash
 python build/build_data.py            # reuse downloaded teasers
 python build/build_data.py --refresh  # re-fetch all og:images
+python build/build_coords.py          # re-geocode coords (ALWAYS run after build_data.py)
+python build/build_coords.py --dry-run  # preview coordinate moves, write nothing
 python build/build_geo.py             # rarely needed (boundaries)
 ```
 

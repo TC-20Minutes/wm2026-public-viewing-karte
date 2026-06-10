@@ -31,6 +31,7 @@ assets/geo/cantons.geojson # GENERATED – cantons + Liechtenstein (filter highl
 assets/fonts/Matter-*.woff2
 vendor/                    # pinned Leaflet, markercluster, gesture-handling
 build/build_data.py        # regenerates data.json + teaser images from the Excel sheet
+build/build_coords.py      # re-geocodes the venue coordinates in data.json (run AFTER build_data.py)
 build/build_geo.py         # regenerates the boundary GeoJSON from geoBoundaries
 data/…xlsx                 # source spreadsheet
 ```
@@ -49,6 +50,34 @@ The script parses the Excel `HYPERLINK()` formulas, fetches each venue link's `o
 self-hosted WebP, and writes `js/data.json`. It prints a fetched-vs-failed summary at the end. Venues whose link has
 no usable preview image (e.g. Instagram pages that require login) fall back to a branded placeholder — that is
 expected and the map handles it gracefully.
+
+### Fixing the coordinates
+
+The lat/lon in the source spreadsheet are low-precision and were individually off (some by 50 m, a few by
+kilometres — e.g. pins landing on railway tracks). `build/build_coords.py` re-geocodes every venue in
+`js/data.json` to its true position and **must be run after `build_data.py`** (which still emits the raw
+spreadsheet coordinates):
+
+```bash
+python build/build_coords.py            # apply corrections, rewrite js/data.json
+python build/build_coords.py --dry-run  # preview every move, write nothing
+```
+
+It cross-checks three independent signals per venue and prints exactly what it did with each:
+
+1. **Address** → the [swisstopo](https://api3.geo.admin.ch) building register, matched by street name **and** house
+   number (it picks the exact number, or the nearest registered number on the same street — never blindly the first
+   fuzzy hit, which is how a pin once ended up on the wrong "Hardstrasse 181" instead of 219).
+2. **Venue name** → OSM/Nominatim POIs, corroborated by the swisstopo gazetteer. Used to place venues that have no
+   house number (squares, parks, beaches like the Ufschötti), and to cross-check the address matches.
+3. **The original coordinate** → kept when neither signal can confidently improve on it.
+
+When the address match and the name location disagree by more than 300 m, the venue is flagged for review; that
+check caught two spreadsheet addresses that were actually the *organiser's* address rather than the venue
+(corrected via the hand-verified `OVERRIDES` table at the top of the script). Venues that can't be pinned
+automatically (no house number, no matching POI) keep their existing hand-placed point and are listed at the end.
+Name-lookup responses are cached in `build/geo_cache/` (git-ignored) so re-runs are fast and stay within
+Nominatim's usage policy.
 
 The boundary files (country mask + canton highlight) are generated separately and rarely need rebuilding:
 
