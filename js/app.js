@@ -69,19 +69,22 @@
     // iframe that focus makes the host page scroll the embed into view (the
     // "jump to Zur Website" bug on desktop). Pan/zoom via buttons + gestures.
     keyboard: false,
-    gestureHandling: true,
-    gestureHandlingOptions: {
-      text: {
-        touch: "Zum Bewegen zwei Finger benutzen",
-        scroll: "Mit Strg + Scrollen zoomen",
-        scrollMac: "Mit ⌘ + Scrollen zoomen"
-      },
-      duration: 1800
-    },
+    // The map starts LOCKED (no pan/zoom) behind a "Karte aktivieren" overlay so
+    // readers can scroll the article straight past it; one tap/click unlocks full
+    // one-finger pan + scroll-wheel zoom. See lockMap()/activateMap() below. This
+    // replaces the old two-finger / Ctrl+scroll gesture-handling guard, which the
+    // editor found too hard to use (the plugin was removed).
     maxBounds: CH_BOUNDS.pad(0.35),
     minZoom: 6,
     maxZoom: 18,
-    zoomSnap: 0  // allow fractional zoom so the country fits tightly, uncut
+    zoomSnap: 0,  // allow fractional zoom so the country fits tightly, uncut
+    // Trackpad/mouse-wheel zoom tuning. Leaflet's default (60 px per zoom level)
+    // makes a trackpad's large scroll deltas jump several levels at once, which
+    // feels uncontrollable. More px-per-level + smooth fractional steps (zoomSnap
+    // 0) + a short debounce make trackpad pinch/scroll zoom gradually and settle.
+    // (zoomDelta is left at 1 so the +/- buttons still step a full level.)
+    wheelPxPerZoomLevel: 140,
+    wheelDebounceTime: 25
   });
 
   // Minimal OpenStreetMap-based basemap (CARTO Positron, no labels) — clean,
@@ -108,6 +111,67 @@
 
   L.control.zoom({ position: "topright" }).addTo(map);
   map.fitBounds(CH_BOUNDS, { padding: [10, 10] });
+
+  /* ---- Tap-to-activate (so the article can scroll past the map) ------ */
+  // Locked: all pan/zoom handlers off and the container set to `touch-action:
+  // pan-y`, so a vertical swipe/scroll over the map scrolls the host article
+  // instead of being trapped. A tap/click on the overlay unlocks full control.
+  var mapContainer = map.getContainer();
+  var mapActivated = false;
+  var activateOverlay = document.getElementById("map-activate");
+
+  // A "lock" button (top-right, under the zoom control) lets the reader hand the
+  // map back so they can scroll the article again. Only shown while activated.
+  var lockBtnEl = null;
+  var LockControl = L.Control.extend({
+    options: { position: "topright" },
+    onAdd: function () {
+      var c = L.DomUtil.create("div", "leaflet-bar pv-lock");
+      var a = L.DomUtil.create("a", "", c);
+      a.href = "#"; a.setAttribute("role", "button");
+      a.title = "Karte sperren"; a.setAttribute("aria-label", "Karte sperren");
+      a.innerHTML = "<svg width='20' height='20' viewBox='0 0 24 24' fill='none' aria-hidden='true'>" +
+        "<rect x='5' y='11' width='14' height='9' rx='2' stroke='currentColor' stroke-width='2'/>" +
+        "<path d='M8 11V8a4 4 0 0 1 8 0v3' stroke='currentColor' stroke-width='2' stroke-linecap='round'/></svg>";
+      L.DomEvent.on(a, "click", function (e) { L.DomEvent.stop(e); lockMap(); });
+      c.style.display = "none";
+      return c;
+    }
+  });
+
+  function lockMap() {
+    mapActivated = false;
+    map.dragging.disable();
+    map.touchZoom.disable();
+    map.scrollWheelZoom.disable();
+    map.doubleClickZoom.disable();
+    map.boxZoom.disable();
+    mapContainer.style.touchAction = "pan-y";
+    if (activateOverlay) activateOverlay.hidden = false;
+    if (lockBtnEl) lockBtnEl.style.display = "none";
+  }
+  function activateMap() {
+    if (mapActivated) return;
+    mapActivated = true;
+    map.dragging.enable();
+    map.touchZoom.enable();
+    map.scrollWheelZoom.enable();
+    map.doubleClickZoom.enable();
+    mapContainer.style.touchAction = "";   // Leaflet's default (full gesture control)
+    if (activateOverlay) activateOverlay.hidden = true;
+    if (lockBtnEl) lockBtnEl.style.display = "";
+  }
+  if (activateOverlay) {
+    // A plain click handler covers both tap and mouse; a real scroll gesture
+    // emits no click, so swiping past the locked map won't accidentally unlock.
+    // The overlay is intentionally not focusable (focusing inside a cross-origin
+    // iframe scrolls the host) — keyboard users get the list view + zoom buttons.
+    activateOverlay.addEventListener("click", activateMap);
+  }
+  var lockControl = new LockControl();
+  map.addControl(lockControl);
+  lockBtnEl = lockControl.getContainer();
+  lockMap();
 
   /* ---- Boundaries: mask out neighbours + highlight cantons ---------- */
   // Dedicated panes stacked between the tiles (200) and the markers (600).
@@ -201,59 +265,27 @@
     }
   }
 
-  /* ---- Geolocate control -------------------------------------------- */
-  var userMarker = null;
-  var LocateControl = L.Control.extend({
-    options: { position: "topright" },
-    onAdd: function () {
-      var c = L.DomUtil.create("div", "leaflet-bar");
-      var a = L.DomUtil.create("a", "pv-locate", c);
-      a.href = "#"; a.title = "Meinen Standort finden"; a.setAttribute("role", "button");
-      a.setAttribute("aria-label", "Meinen Standort finden");
-      a.innerHTML = locateSvg();
-      L.DomEvent.on(a, "click", function (e) {
-        L.DomEvent.stop(e);
-        locateUser(a);
-      });
-      return c;
-    }
-  });
-  map.addControl(new LocateControl());
-
-  function locateSvg() {
-    return '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">' +
-      '<circle cx="12" cy="12" r="4" stroke="currentColor" stroke-width="2"/>' +
-      '<path d="M12 2v3M12 19v3M2 12h3M19 12h3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
-  }
-
-  function locateUser(btn) {
-    if (!navigator.geolocation) { btn.classList.add("error"); return; }
-    btn.classList.add("locating");
-    navigator.geolocation.getCurrentPosition(function (pos) {
-      btn.classList.remove("locating", "error");
-      var ll = L.latLng(pos.coords.latitude, pos.coords.longitude);
-      if (userMarker) { userMarker.setLatLng(ll); }
-      else {
-        userMarker = L.marker(ll, {
-          icon: L.divIcon({ className: "", html: '<span class="pv-userdot"></span>', iconSize: [18, 18], iconAnchor: [9, 9] }),
-          keyboard: false, interactive: false
-        }).addTo(map);
-      }
-      map.flyTo(ll, Math.max(map.getZoom(), 12), { duration: 0.8 });
-    }, function () {
-      btn.classList.remove("locating");
-      btn.classList.add("error");
-    }, { enableHighAccuracy: true, timeout: 8000, maximumAge: 60000 });
-  }
-
   /* ---- Marker cluster group ----------------------------------------- */
   var cluster = L.markerClusterGroup({
     showCoverageOnHover: false,
-    // Smaller radius at the country-wide zoom so the dense Mittelland breaks
-    // into several regional clusters instead of one giant blob (better at-a-
-    // glance distribution on mobile); tighter grouping again as you zoom in.
-    maxClusterRadius: function (zoom) { return zoom <= 8 ? 35 : 55; },
+    // Graduated radius: clusters break apart progressively as you zoom, so
+    // individual venues surface earlier instead of staying merged. Country view
+    // (zoom ≤ 8) keeps a mid radius so the dense Mittelland shows several
+    // regional clusters, not one giant blob (don't flatten this — see CLAUDE.md).
+    maxClusterRadius: function (zoom) {
+      if (zoom <= 8) return 40;
+      if (zoom <= 9) return 34;
+      if (zoom <= 10) return 28;
+      if (zoom <= 11) return 24;   // canton-fit band: merge dense city venues into
+      if (zoom <= 12) return 15;   // ONE clean cluster instead of overlapping bubbles
+      return 12;                   // deep zoom: venues stand on their own
+    },
+    // At city zoom every venue stands on its own (no more clustering).
+    disableClusteringAtZoom: 13,
     spiderfyOnMaxZoom: true,
+    spiderfyDistanceMultiplier: 1.3,
+    // We zoom-to-bounds ourselves (below) so we can add padding + a smoother fit.
+    zoomToBoundsOnClick: false,
     iconCreateFunction: function (c) {
       var n = c.getChildCount();
       var size = n < 10 ? "small" : n < 30 ? "medium" : "large";
@@ -265,6 +297,15 @@
     }
   });
   map.addLayer(cluster);
+
+  // Smoother cluster tap: fit the cluster's children with padding so they don't
+  // land at the very edge; at the deepest levels spiderfy so overlapping pins
+  // fan out and each stays tappable.
+  cluster.on("clusterclick", function (e) {
+    var c = e.layer;
+    if (map.getZoom() >= 12) c.spiderfy();
+    else c.zoomToBounds({ padding: [55, 55], maxZoom: 14 });
+  });
 
   // Leaflet/markercluster put tabindex="0" on every marker + cluster icon.
   // Inside a cross-origin iframe, clicking a focusable element makes the HOST
@@ -429,13 +470,19 @@
   }
 
   /* ---- View toggle -------------------------------------------------- */
+  var pendingFit = false;  // a filter changed while in list view → fit on next map show
   function setView(view) {
     state.view = view;
     var listMode = view === "list";
     els.app.setAttribute("data-view", view);
     els.viewList.setAttribute("aria-pressed", String(listMode));
     els.viewMap.setAttribute("aria-pressed", String(!listMode));
-    if (!listMode) { setTimeout(function () { map.invalidateSize(); }, 50); }
+    if (!listMode) {
+      setTimeout(function () {
+        map.invalidateSize();
+        if (pendingFit) { pendingFit = false; updateCantonHighlight(els.canton.value, true); }
+      }, 50);
+    }
   }
   els.viewMap.addEventListener("click", function () { setView("map"); });
   els.viewList.addEventListener("click", function () { setView("list"); });
@@ -443,6 +490,7 @@
   // From a list card: switch to map, decluster, open sheet.
   function focusVenueOnMap(v, focusClose) {
     var m = state.markers[v.id];
+    pendingFit = false;  // we're zooming straight to the venue, skip the canton fit
     setView("map");
     setTimeout(function () {
       map.invalidateSize();
@@ -527,8 +575,16 @@
   /* ---- Events ------------------------------------------------------- */
   els.canton.addEventListener("change", function () {
     applyFilters();
-    updateCantonHighlight(els.canton.value, true);
-    if (state.view === "list") setView("map"); // show the highlight on the map
+    // Stay in whatever view the user is in. Fitting the map to the filtered
+    // canton only makes sense when the map is actually visible — a hidden,
+    // zero-size map computes the wrong zoom — so in list view we update the
+    // highlight without fitting and defer the fit until the map is shown.
+    if (state.view === "map") {
+      updateCantonHighlight(els.canton.value, true);
+    } else {
+      updateCantonHighlight(els.canton.value, false);
+      pendingFit = true;
+    }
   });
 
   // Reset to the initial state: all cantons, map view, no highlight, full country.

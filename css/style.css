@@ -33,6 +33,7 @@
   --widget-border: #d3dbe8;
   --scrim:      rgba(7, 24, 77, .45);
   --map-bg:     #eef2f8;
+  --cluster-ring: rgba(255, 255, 255, .92);
 
   --shadow:    0 8px 28px rgba(7, 24, 77, .18);
   --shadow-sm: 0 2px 10px rgba(7, 24, 77, .10);
@@ -54,6 +55,7 @@
   --widget-border: rgba(255, 255, 255, .16);
   --scrim:      rgba(0, 0, 0, .6);
   --map-bg:     #161c21;
+  --cluster-ring: rgba(255, 255, 255, .55);
   --shadow:    0 8px 28px rgba(0, 0, 0, .5);
   --shadow-sm: 0 2px 10px rgba(0, 0, 0, .4);
 }
@@ -193,6 +195,47 @@ main { position: relative; flex: 1 1 auto; min-height: 0; }
 #map { position: absolute; inset: 0; z-index: 1; background: var(--map-bg); }
 .leaflet-container { font-family: var(--font); background: var(--map-bg); }
 
+/* Tap-to-activate overlay: sits above Leaflet panes (max z 700) inside #map, so
+   it's naturally hidden behind the list view. `touch-action: pan-y` lets a
+   vertical swipe scroll the host article straight past the locked map. */
+.map-activate {
+  position: absolute; inset: 0; z-index: 800;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+  touch-action: pan-y; -webkit-tap-highlight-color: transparent;
+  background: transparent;
+}
+.map-activate[hidden] { display: none; }
+/* Frosted-glass pill, centred so it stands out over the map. */
+.map-activate .ma-pill {
+  display: inline-flex; align-items: center; gap: 11px;
+  background: rgba(255, 255, 255, .55);
+  -webkit-backdrop-filter: blur(12px) saturate(1.3);
+  backdrop-filter: blur(12px) saturate(1.3);
+  color: var(--text);
+  border: 1px solid rgba(255, 255, 255, .65);
+  border-radius: 16px;
+  padding: 13px 20px;
+  box-shadow: 0 10px 34px rgba(7, 24, 77, .22), inset 0 1px 0 rgba(255, 255, 255, .5);
+  transition: transform .12s ease, box-shadow .12s ease;
+}
+.map-activate:hover .ma-pill { box-shadow: 0 14px 40px rgba(7, 24, 77, .28), inset 0 1px 0 rgba(255, 255, 255, .5); }
+.map-activate:active .ma-pill { transform: scale(.97); }
+.map-activate .ma-pill svg { color: var(--blue); flex: 0 0 auto; }
+.map-activate .ma-text { display: flex; flex-direction: column; gap: 1px; text-align: left; }
+.map-activate .ma-text strong { font: 600 15px/1.15 var(--font); }
+.map-activate .ma-text small { font: 500 12px/1.2 var(--font); color: var(--text-muted); }
+/* Glass tints for dark mode */
+:root[data-theme="dark"] .map-activate .ma-pill {
+  background: rgba(38, 47, 55, .5);
+  border-color: rgba(255, 255, 255, .18);
+  box-shadow: 0 10px 34px rgba(0, 0, 0, .5), inset 0 1px 0 rgba(255, 255, 255, .12);
+}
+
+/* "Lock map" button (shown while the map is active) — matches the zoom control */
+.leaflet-bar.pv-lock { margin-top: 8px; }
+.leaflet-bar.pv-lock a { display: flex; align-items: center; justify-content: center; }
+
 /* Custom marker pin */
 .pv-pin {
   width: 38px; height: 38px; cursor: pointer;
@@ -202,17 +245,20 @@ main { position: relative; flex: 1 1 auto; min-height: 0; }
 .pv-pin:hover, .pv-pin:focus { transform: scale(1.12); outline: none; }
 .pv-pin.active { transform: scale(1.22); }
 
-/* Cluster bubbles (brand blues) */
+/* Cluster bubbles (brand blues). A solid ring lifts them off the tiles in both
+   themes; an outer shadow gives depth. Hover nudges for a clickable feel. */
 .pv-cluster {
   background: var(--blue); color: var(--on-accent);
   border-radius: 50%; display: flex; align-items: center; justify-content: center;
   font-weight: 700; font-size: 15px;
-  border: 3px solid rgba(255,255,255,.9);
-  box-shadow: 0 4px 12px rgba(0,0,0,.35);
+  border: 3px solid var(--cluster-ring);
+  box-shadow: 0 3px 10px rgba(0,0,0,.30), 0 0 0 1px rgba(0,0,0,.06);
+  transition: transform .12s ease;
 }
-.pv-cluster.small  { width: 40px; height: 40px; }
-.pv-cluster.medium { width: 48px; height: 48px; background: var(--mid-blue); font-size: 16px; }
-.pv-cluster.large  { width: 58px; height: 58px; background: var(--dark-blue); font-size: 17px; }
+.pv-cluster:hover { transform: scale(1.08); }
+.pv-cluster.small  { width: 38px; height: 38px; }
+.pv-cluster.medium { width: 46px; height: 46px; background: var(--mid-blue); font-size: 16px; }
+.pv-cluster.large  { width: 56px; height: 56px; background: var(--dark-blue); font-size: 17px; }
 :root[data-theme="dark"] .pv-cluster.large { background: #0a1f63; }
 
 /* Map control buttons (zoom + locate) */
@@ -225,31 +271,11 @@ main { position: relative; flex: 1 1 auto; min-height: 0; }
 .leaflet-bar a:hover { background: var(--surface-2); }
 .leaflet-bar a.leaflet-disabled { color: var(--text-muted); background: var(--surface); }
 .leaflet-touch .leaflet-bar a { width: var(--tap); height: var(--tap); line-height: var(--tap); }
-.pv-locate {
-  display: flex; align-items: center; justify-content: center;
-  background: var(--surface); color: var(--text);
-}
-.pv-locate.locating svg { animation: spin 1s linear infinite; color: var(--blue); }
-@keyframes spin { to { transform: rotate(360deg); } }
-.pv-locate.error { color: var(--text-muted); }
-
 .leaflet-control-attribution {
   font-size: 10px; background: var(--surface); color: var(--text-muted);
 }
 .leaflet-control-attribution a { color: var(--blue); }
 
-/* gesture-handling hint */
-.leaflet-gesture-handling-touch-warning,
-.leaflet-gesture-handling-scroll-warning {
-  font-family: var(--font) !important; font-weight: 600 !important;
-}
-
-/* User-location dot */
-.pv-userdot {
-  width: 18px; height: 18px; border-radius: 50%;
-  background: var(--cyan); border: 3px solid var(--surface);
-  box-shadow: 0 0 0 4px rgba(0,208,255,.25), 0 2px 6px rgba(0,0,0,.4);
-}
 
 /* ---- List view ------------------------------------------------------ */
 #list { display: none; }
@@ -349,7 +375,6 @@ main { position: relative; flex: 1 1 auto; min-height: 0; }
 
 @media (prefers-reduced-motion: reduce) {
   .sheet, .scrim, .pv-pin, .card { transition: none; }
-  .pv-locate.locating svg { animation: none; }
 }
 
 .visually-hidden {
